@@ -1,9 +1,11 @@
 import sqlite3
 import pandas as pd
+import csv
 
 class EtlAssignment:
 
     db_connection = None
+    db_cursor = None
     db_tables = ['items', 'customers', 'sales', 'orders']
     df_items = None
     df_customers = None
@@ -13,6 +15,7 @@ class EtlAssignment:
 
     def __init__(self) -> None:
         self.db_connection = self.connect_db()
+        self.db_cursor = self.db_connection.cursor()
         self.get_dataframes()
         self.merge_dataframes()
         self.clean_up_dataframes()
@@ -33,6 +36,8 @@ class EtlAssignment:
     def close_connection(self):
         if self.db_connection:
             self.db_connection.close()
+        if self.db_cursor:
+            self.db_cursor
     
     def merge_dataframes(self):
         self.df_sales = self.df_sales.merge(self.df_customers, how = "left", on = "customer_id")
@@ -65,9 +70,54 @@ class EtlAssignment:
         print(df_result)
         df_result.to_csv('pandas_solution.csv', sep=';', index=False)
 
+    def sql_filter_solution(self):
+        query = """
+        SELECT 
+            customers.customer_id,
+            customers.age,
+            items.item_name,
+            SUM(COALESCE(orders.quantity, 0)) AS total_quantity
+        FROM 
+            orders
+        LEFT JOIN 
+            items ON items.item_id = orders.item_id
+        LEFT JOIN 
+            sales ON sales.sales_id = orders.sales_id
+        LEFT JOIN 
+            customers ON customers.customer_id = sales.customer_id
+        WHERE 
+            customers.age >= 18 AND customers.age <= 35
+        GROUP BY 
+            items.item_name, 
+            customers.customer_id, 
+            customers.age
+        ORDER BY 
+            customers.customer_id ASC;
+        """
+        self.db_cursor.execute(query)
+        rows = self.db_cursor.fetchall()
+
+        column_format = ["customer_id", "age", "item_name", "quantity"]
+        for row in rows:
+            row_dict = dict(zip(column_format, row))
+            print(row_dict)
+        
+        self.convert_sql_results_to_csv(rows, column_format)
+
+    def convert_sql_results_to_csv(self, rows, column_format):
+        csv_file = 'sql_solution.csv'
+        with open(csv_file, mode='w', newline='', encoding='utf-8') as file:
+            writer = csv.writer(file, delimiter=';') 
+            writer.writerow(column_format)
+            writer.writerows(rows)
 
 if __name__ == "__main__":
 
     etl_assignment = EtlAssignment()
-    print(etl_assignment.pandas_filter_solution())
+    print("PANDAS SOLUTION: ")
+    etl_assignment.pandas_filter_solution()
+
+    print("SQL SOLUTION: ")
+    etl_assignment.sql_filter_solution()
+
     etl_assignment.close_connection()
